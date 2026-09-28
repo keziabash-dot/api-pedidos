@@ -1,0 +1,46 @@
+# Os valores entre ${...:-padrao} podem ser sobrescritos por um arquivo .env
+# (veja .env.example). Sem .env, os valores padrão são usados e
+# "docker compose up -d --build" funciona sem nenhum passo manual.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pedidos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pedidos}
+      POSTGRES_DB: ${POSTGRES_DB:-pedidos}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend
+    restart: unless-stopped
+    # Sem "ports": o banco só é acessível pela rede interna do Docker.
+
+  pedidos:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-pedidos}:${POSTGRES_PASSWORD:-pedidos}@postgres:5432/${POSTGRES_DB:-pedidos}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  backend:
